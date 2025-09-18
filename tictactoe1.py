@@ -1,5 +1,6 @@
 import sys
 import math
+import random
 ######################################
 # Todo
 # 
@@ -66,6 +67,14 @@ class GameBoard:
             return 2
         else:
             return 1
+        
+    def getmoves(self):
+        return [(r,c) for r in range(3) for c in range(3) if self.entries[r][c]==0] # all possible position where the board is empty
+    
+    def copy(self):
+        new_board = GameBoard()
+        new_board.entries = [row[:] for row in self.entries]
+        return new_board
     
 
     def minmax(self, bd=None, depth=0):
@@ -165,7 +174,125 @@ class GameBoard:
                     self.ab_prunes += 1
                     break
             return move,best
+
+
+class MCTSNode:
+    def __init__(self, bd: GameBoard, parent: None, action: None):
+        self.bd = bd             
+        self.parent = parent
+        self.action = action # action that led to this node          
+        self.children = [] # list of child nodes
+        self.possible_moves = bd.getmoves()  # moves that can be played from this node
+        self.visits = 0
+        self.wins = 0.0         
+
+    def is_fully_expanded(self):
+        return len(self.possible_moves) == 0
+    
+    def is_terminal(self):
+        return self.bd.checkwin() != 0
+    
+def apply_action(bd:GameBoard, action, player):
+        r,c = action        
+        new_bd = bd.copy()
+        new_bd.entries[r][c] = player
+        return new_bd
+
+
+class MCTS:
+    def __init__(self, c = math.sqrt(2)):
+        self.c = c
+
+    
+    def uct_select(self, node:MCTSNode, c = None) -> MCTSNode:
+        # node: current node
+        # return: child node with highest UCT value
+        if c is None:
+            c = self.c
+        return max(node.children, key=lambda child: (child.wins / child.visits) + c*math.sqrt(math.log(node.visits)/child.visits))
+
+    def expand(self, node:MCTSNode) -> MCTSNode:
+        # node: current node
+        # return: new child node after applying one of the possible moves
+
+        action = node.possible_moves.pop()
+        r,c = action
+
+        child_bd = node.bd.copy()
+        player = child_bd.check_nextplayer(child_bd.entries)
+        child_bd = apply_action(child_bd, action, player)
+
+        child_node = MCTSNode(child_bd, parent=node, action = action)
+        node.children.append(child_node)
+        return child_node
+    
+    def rollout(self,bd:GameBoard) -> int:
+        # bd: current board
+        # return: score on the same (+1: for winner player)
         
+        rollout_bd = bd.copy()
+
+        while rollout_bd.checkwin() == 0:
+            next_player = rollout_bd.check_nextplayer(rollout_bd.entries)
+            actions = rollout_bd.getmoves()
+            if not actions:
+                break
+            action =random.choice(actions)
+            rollout_bd = apply_action(rollout_bd, action, next_player)
+        
+        winner = rollout_bd.checkwin()
+        if winner ==1 or winner ==2:
+            return +1
+        else:
+            return 0
+        
+    def backpropagate(self, node:MCTSNode, reward:int):
+        current = node
+        while current is not None:
+            current.visits += 1
+            current.wins += reward
+            # switch perspective
+            reward = -reward
+
+            #propagate to parent
+            current = current.parent
+    
+    def search(self,root:MCTSNode, iter = 2000):
+        # based on the rood board, run MCTS and return the best action
+        #root = MCTSNode(root_bd, parent=None, action=None)
+        root_bd = root.bd
+        if root_bd.checkwin() != 0:
+            raise ValueError("Game is over")
+        
+        for _ in range(iter):
+            node = root
+
+            # selection
+            while (not node.is_terminal()) and node.is_fully_expanded():
+                node = self.uct_select(node, c= self.c)
+            
+            # expansion
+            if (not node.is_terminal()) and (not node.is_fully_expanded()):
+                node = self.expand(node)
+
+            # simulation 
+            reward = self.rollout(node.bd)
+
+            # backpropagation
+            self.backpropagate(node, reward)
+        self.c = 0
+        best_child = self.uct_select(root,c=0)
+        return best_child.action
+
+def MCTS_move(root_state: GameBoard, iterations=2000):
+    mcts = MCTS()
+    root_node = MCTSNode(bd = root_state, parent= None, action=None)
+    
+    best_action = mcts.search(root_node, iter=iterations)
+    player = root_state.check_nextplayer(root_state.entries)
+    next_state = apply_action(root_state, best_action, player)
+    
+    return best_action, player, next_state
             
 
 class TicTacToeGame:
@@ -230,11 +357,16 @@ class TicTacToeGame:
             self.turn = 2
         else:
             print("AI is thinking...")
-            move, score = self.gameboard.minmax(self.gameboard.entries)
-            #move, score = self.gameboard.alphabeta(self.gameboard.entries,self.alpha,self.beta)
-            print("AI chooses move: ", move, " with score: ", score)
-            self.gameboard.entries[move[0]][move[1]] = 2
+            best_action, next_player, next_bd = MCTS_move(self.gameboard, iterations=1000)            
+            self.gameboard.entries[best_action[0]][best_action[1]] = 2
             self.turn = 1
+            
+
+            # move, score = self.gameboard.minmax(self.gameboard.entries)
+            # #move, score = self.gameboard.alphabeta(self.gameboard.entries,self.alpha,self.beta)
+            # print("AI chooses move: ", move, " with score: ", score)
+            # self.gameboard.entries[move[0]][move[1]] = 2
+            # self.turn = 1
 
 
 
