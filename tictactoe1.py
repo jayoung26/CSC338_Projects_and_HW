@@ -176,8 +176,28 @@ class TicTacToeGame:
         self.turn = 1 # first player is 1
         self.turnnumber = 1
 
+    def x_or_o():
+        valid_input = False
+
+        while valid_input == False:
+            user_input = input("Choose X or O:").upper()
+            if user_input == "X" or user_input == "O":
+                print("Valid Input")
+                valid_input = True
+            else:
+                print("Please enter valid input")
+                continue
+        
+        return user_input
 
     def playturn(self):
+        if (player_choice == "X" and self.turnnumber <= 1):
+            print("You chose X!")
+            self.turn = 1
+        elif player_choice == "O" and self.turnnumber <= 1:
+            print("You chose O!")
+            self.turn = 2
+
         print("Turn number: ", self.turnnumber)
         self.turnnumber += 1
         self.alpha = -math.inf
@@ -191,6 +211,8 @@ class TicTacToeGame:
             
             while validinput == False:
                 user_input = input("Enter two numbers separated by a comma: ")
+                if user_input == "q":
+                    break
                 try:
                     humanrow, humancol = map(int, map(str.strip, user_input.split(',')))
                     if humanrow < 3 and humancol < 3:
@@ -203,9 +225,6 @@ class TicTacToeGame:
                 except:
                     print("Please use a valid input") 
                     continue
-
-
-    
                  
             self.gameboard.entries[humanrow][humancol] = 1
             self.turn = 2
@@ -219,8 +238,9 @@ class TicTacToeGame:
 
 
 
-
 game = TicTacToeGame()
+
+player_choice = TicTacToeGame.x_or_o()
 
 while game.gameboard.state == 0:
     game.playturn()
